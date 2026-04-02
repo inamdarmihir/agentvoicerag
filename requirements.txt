@@ -19,11 +19,12 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
 
-# LLM Orchestration
-langchain>=0.3.0
-langchain-community>=0.3.0
-langchain-openai>=0.2.0
-openai>=1.50.0
+# LLM – HuggingFace quantized inference
+# bitsandbytes enables 4-bit / 8-bit quantization (CUDA only; safe to install on CPU too)
+bitsandbytes>=0.43.0
+
+# Text chunking (RecursiveCharacterTextSplitter)
+langchain-text-splitters>=0.3.0
 
 # Text-to-Speech
 gtts>=2.5.0

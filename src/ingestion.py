@@ -10,7 +10,7 @@ from typing import List, Tuple
 
 import requests
 from bs4 import BeautifulSoup
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from sentence_transformers import SentenceTransformer
@@ -66,7 +66,8 @@ def ingest_url(
 
     Returns (number_of_chunks_stored, page_title).
     """
-    ensure_collection(client, dim=encoder.get_sentence_embedding_dimension())
+    dim = encoder.get_sentence_embedding_dimension() or EMBEDDING_DIM
+    ensure_collection(client, dim=dim)
 
     raw_text = scrape_url(url)
     if not raw_text.strip():

@@ -7,7 +7,7 @@ Architecture
                         │
   URL Ingestion ──►  Qdrant (vector search)
                         │
-                    LLM (response generation)
+                    HuggingFace quantized LLM (response generation)
                         │
                     gTTS (text-to-speech response)
 """
@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 
 from src.ingestion import get_encoder, get_ingested_sources, ingest_url
-from src.llm import generate_response
+from src.llm import HFQuantizedLLM, generate_response
 from src.retrieval import build_context, retrieve
 from src.voice import VibeVoiceASR, text_to_speech
 
@@ -67,17 +67,40 @@ with st.sidebar:
             type="password",
         )
 
-    st.subheader("🤖 LLM")
-    openai_api_key = st.text_input(
-        "OpenAI API Key",
-        value=os.getenv("OPENAI_API_KEY", ""),
-        type="password",
-        help="Required for GPT-powered answers.  Leave blank to see raw context.",
+    st.subheader("🤖 LLM (HuggingFace)")
+    llm_model = st.text_input(
+        "Model ID",
+        value=os.getenv("HF_LLM_MODEL", "Qwen/Qwen2.5-1.5B-Instruct"),
+        help=(
+            "HuggingFace model repo ID.\n\n"
+            "Free models (no token needed):\n"
+            "• Qwen/Qwen2.5-0.5B-Instruct (0.5 B, any CPU)\n"
+            "• Qwen/Qwen2.5-1.5B-Instruct (1.5 B, default)\n"
+            "• TinyLlama/TinyLlama-1.1B-Chat-v1.0\n"
+            "• microsoft/Phi-3-mini-4k-instruct (3.8 B)\n"
+            "• google/gemma-2-2b-it (2 B)\n"
+            "• mistralai/Mistral-7B-Instruct-v0.3 (7 B, GPU recommended)"
+        ),
     )
-    llm_model = st.selectbox(
-        "Model",
-        ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
-        index=0,
+    llm_quantization = st.selectbox(
+        "Quantization",
+        ["none", "4bit", "8bit"],
+        index=["none", "4bit", "8bit"].index(
+            os.getenv("HF_LLM_QUANTIZATION", "none")
+            if os.getenv("HF_LLM_QUANTIZATION", "none") in ("none", "4bit", "8bit")
+            else "none"
+        ),
+        help=(
+            "none – full precision (fp16 on CUDA, fp32 on CPU/MPS)\n"
+            "4bit – NF4 double-quantization (CUDA + bitsandbytes required)\n"
+            "8bit – LLM.int8() (CUDA + bitsandbytes required)"
+        ),
+    )
+    hf_token = st.text_input(
+        "HuggingFace Token",
+        value=os.getenv("HF_TOKEN", ""),
+        type="password",
+        help="Required only for gated models (Llama, Gemma, …).  Leave blank otherwise.",
     )
 
     st.subheader("🎙️ ASR")
@@ -97,7 +120,8 @@ with st.sidebar:
     st.markdown("---")
     st.caption(
         "**AgentVoiceRAG** · Built with "
-        "[VibeVoice](https://github.com/microsoft/VibeVoice) & "
+        "[VibeVoice](https://github.com/microsoft/VibeVoice), "
+        "[HuggingFace](https://huggingface.co) & "
         "[Qdrant](https://qdrant.tech)"
     )
 
@@ -125,6 +149,15 @@ def _get_asr(model_id: str) -> VibeVoiceASR:
     return VibeVoiceASR(model_id=model_id)
 
 
+@st.cache_resource
+def _get_llm(model_id: str, quantization: str, hf_token: str) -> HFQuantizedLLM:
+    return HFQuantizedLLM(
+        model_id=model_id,
+        quantization=quantization if quantization != "none" else None,
+        hf_token=hf_token or None,
+    )
+
+
 qdrant_client = _get_qdrant(qdrant_mode, qdrant_url, qdrant_api_key)
 encoder = _get_encoder()
 
@@ -134,7 +167,8 @@ encoder = _get_encoder()
 st.title("🎙️ AgentVoiceRAG")
 st.markdown(
     "**Agentic Voice RAG** powered by "
-    "[Microsoft VibeVoice-ASR](https://huggingface.co/microsoft/VibeVoice-ASR) "
+    "[Microsoft VibeVoice-ASR](https://huggingface.co/microsoft/VibeVoice-ASR), "
+    "quantized [HuggingFace LLMs](https://huggingface.co/models), "
     "and [Qdrant](https://qdrant.tech).  "
     "Ingest web pages, then ask questions with your voice!"
 )
@@ -259,11 +293,11 @@ with tab_chat:
 
                 # 3. Generate answer -------------------------------------------
                 with st.spinner("🤖 Generating answer …"):
+                    llm = _get_llm(llm_model, llm_quantization, hf_token)
                     answer = generate_response(
                         query=transcript,
                         context=context,
-                        openai_api_key=openai_api_key or None,
-                        model=llm_model,
+                        llm=llm,
                     )
 
                 st.session_state["last_answer"] = answer
@@ -335,11 +369,11 @@ with tab_chat:
             else:
                 context = build_context(chunks)
                 with st.spinner("🤖 Generating answer …"):
+                    llm = _get_llm(llm_model, llm_quantization, hf_token)
                     answer = generate_response(
                         query=text_query,
                         context=context,
-                        openai_api_key=openai_api_key or None,
-                        model=llm_model,
+                        llm=llm,
                     )
                 st.markdown(answer)
                 st.session_state["history"].append(
