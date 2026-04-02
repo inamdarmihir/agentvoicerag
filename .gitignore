@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables
+.env
+
+# Streamlit cache
+.streamlit/
+
+# Model cache (can be large – regenerated automatically)
+# Uncomment if you don't want to commit cached model weights
+# ~/.cache/huggingface/
+
+# OS
+.DS_Store
+Thumbs.db
